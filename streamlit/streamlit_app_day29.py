@@ -58,7 +58,7 @@ with st.sidebar:
     ['Demo (5 phrases max)', 'Unlocked Mode'],
     icons=['bi-joystick', 'bi-key-fill'],
     menu_icon='',
-    default_index=0
+    default_index=1
   )
 ###########################################
 # The code below is to display the shortcuts
@@ -100,113 +100,136 @@ st.sidebar.markdown(
   "You can quickly deploy Streamlit apps using [Streamlit Cloud](https://streamlit.io/cloud) in just a few clicks."
 )
 
-def main():
-  st.caption('')
-
-if selected == "Demo (5 phrases max)":
-  API_KEY = st.secrets['HUGGINGFACE_API_KEY']
+def send_query(api_key, payload):
+  def query(payload):
+      response = requests.post(API_URL, headers=headers, json=payload)
+      # For displaying the status code from API response
+      # st.write(response.status_code)
+      return response.json()
+  API_KEY = api_key
   API_URL = (
     "https://api-inference.huggingface.co/models/valhalla/distilbart-mnli-12-3"
   )
 
   headers = {"Authorization": f"Bearer {API_KEY}"}
+  return query(payload)
 
-  with st.form(key="my_form"):
-    multiselectComponent = st_tags(
-      label='',
-      text="Add labels - 3 max",
-      value=["Transactional", "Informational", "Navigational"],
-      suggestions=[
-        "Navigational",
-        "Transactional",
-        "Informational",
-        "Positive",
-        "Negative",
-        "Neutral",
-      ],
-      maxtags=3
-    )
+def is_form_input_valid(submitted, multiselectComponent, linesList, key):
+  if not submitted and not st.session_state.valid_inputs_received:
+    return False
 
-    new_line = "\n"
-    phrases = [
-      "I want to buy something in this store",
-      "How to ask a question about a product",
-      "Request a refund through the Google Play store",
-      "I have a broken screen, what should I do?",
-      "Can I have the link to the product?",
-    ]
-    sample = f"{new_line.join(map(str, phrases))}"
+  elif submitted and not key:
+    st.warning("Please input your Hugging Face API key")
+    st.session_state.valid_inputs_received = False
+    return False
 
-    linesDeduped2 = []
-
-    MAX_LINES = 5
-    text = st.text_area(
-      "Enter keyphrases to classify",
-      sample,
-      height=200,
-      key="2",
-      help="At least two keyphrases for the classifier to work, one per line, "
-      + str(MAX_LINES)
-      + " keyphrases max as part of the demo"
-    )
-    lines = text.split("\n") # A list of lines
-    linesList = []
-    for x in lines:
-      linesList.append(x)
-    linesList = list(dict.fromkeys(linesList)) # Remove duplicates
-    linesList = list(filter(None, linesList)) # Remove duplicates
-
-    if len(linesList) > MAX_LINES:
-      st.info(
-        f"🚨 Only the first "
-        + str(MAX_LINES)
-        + "keyphrases will be reviewed. Unlock that limit by switching to 'Unlocked Mode'"
-      )
-
-    linesList = linesList[:MAX_LINES]
-    submit_button = st.form_submit_button(label="Submit")
-
-  if not submit_button and not st.session_state.valid_inputs_received:
-    st.stop()
-
-  elif submit_button and not text:
+  elif submitted and not linesList:
     st.warning("There is no keyphrases to classify")
     st.session_state.valid_inputs_received = False
-    st.stop()
+    return False
 
-  elif submit_button and not multiselectComponent:
+  elif submitted and not multiselectComponent:
     st.warning("You have not added any labels, please add some!")
     st.session_state.valid_inputs_received = False
-    st.stop()
+    return False
 
-  elif submit_button and len(multiselectComponent) == 1:
+  elif submitted and len(multiselectComponent) == 1:
     st.warning("Please make sure to add at least two labels for classification")
     st.session_state.valid_inputs_received = False
-    st.stop()
+    return False
     
-  elif submit_button or st.session_state.valid_inputs_received:
+  elif submitted or st.session_state.valid_inputs_received:
+    return True
+  
+def text_form(max_lines):
+  multiselectComponent = st_tags(
+    label='',
+    text="Add labels - 3 max",
+    value=["Transactional", "Informational", "Navigational"],
+    suggestions=[
+      "Navigational",
+      "Transactional",
+      "Informational",
+      "Positive",
+      "Negative",
+      "Neutral",
+    ],
+    maxtags=3
+  )
+
+  new_line = "\n"
+  phrases = [
+    "I want to buy something in this store",
+    "How to ask a question about a product",
+    "Request a refund through the Google Play store",
+    "I have a broken screen, what should I do?",
+    "Can I have the link to the product?",
+  ]
+  sample = f"{new_line.join(map(str, phrases))}"
+
+  MAX_LINES = max_lines
+  text = st.text_area(
+    "Enter keyphrases to classify",
+    sample,
+    height=200,
+    key="2",
+    help="At least two keyphrases for the classifier to work, one per line, "
+    + str(MAX_LINES)
+    + " keyphrases max as part of the demo"
+  )
+  lines = text.split("\n") # A list of lines
+  linesList = []
+  for x in lines:
+    linesList.append(x)
+  linesList = list(dict.fromkeys(linesList)) # Remove duplicates
+  linesList = list(filter(None, linesList)) # Remove duplicates
+
+  if len(linesList) > MAX_LINES:
+    st.info(
+      f"🚨 Only the first "
+      + str(MAX_LINES)
+      + "keyphrases will be reviewed. Unlock that limit by switching to 'Unlocked Mode'"
+    )
+
+  linesList = linesList[:MAX_LINES]
+
+  return (multiselectComponent, linesList)
+
+def main():
+  st.caption('')
+
+with st.form(key="my_form"):
+  if selected != "Demo (5 phrases max)":
+    API_KEY = st.text_input(
+          "Enter your 🤗 HuggingFace API key",
+          help="Once you created you HuggiginFace account, you can get your free API token in your settings page: https://huggingface.co/settings/tokens",
+      )
+  else:
+    API_KEY = st.secrets['HUGGINGFACE_API_KEY']
+  multiselectComponent, linesList = text_form(5)
+  submit_button = st.form_submit_button(label="Submit")
+
+if not is_form_input_valid(submit_button, multiselectComponent, len(linesList), API_KEY):
+  st.stop()
+
+else:
+  try:
     if submit_button:
       st.session_state.valid_inputs_received = True
-
-    def query(payload):
-      response = requests.post(API_URL, headers=headers, json=payload)
-      # For displaying the status code from API response
-      # st.write(response.status_code)
-      return response.json()
     
-    listtest = ["I want a refund", "I have a question"]
     listToAppend = []
 
     for row in linesList:
-      output2 = query(
+      output = send_query(
+        API_KEY,
         {
           "inputs": row,
           "parameters": {"candidate_labels": multiselectComponent},
           "options": {"wait_for_model": True}
         }
       )
-      listToAppend.append(output2)
-      #df = pd.DataFrame.from_dict(output2)
+      listToAppend.append(output)
+      #df = pd.DataFrame.from_dict(output)
 
     st.success('✅ Done!')
 
@@ -223,7 +246,52 @@ if selected == "Demo (5 phrases max)":
     )
 
     st.caption("")
-
+    # List comprehension to convert the decimals to percentages
     f = [[f"{x:.2%}" for x in row] for row in df["scores"]]
+    df["classification scores"] = f
+    df.drop('scores', inplace=True, axis=1)
 
+    # This is to rename the column
+    df.rename(columns={"sequence": "keyphrase"}, inplace=True)
 
+    # The code below is for Ag-grid
+    gb = GridOptionsBuilder.from_dataframe(df)
+    # enables pivoting on all columns
+    gb.configure_default_column(
+      enablePivot=True, enablevalue=True, eneableRowGroup=True,
+      groupable=True,
+      #Show row group panel added in library file
+    )
+    gb.configure_selection(selection_mode="multiple", use_checkbox=True)
+    gb.configure_side_bar()
+    gridOptions = gb.build()
+
+    response = AgGrid(
+      df,
+      gridOptions=gridOptions,
+      enable_enterprise_modules=True,
+      update_mode=GridUpdateMode.MODEL_CHANGED,
+      data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
+      height=300,
+      fit_columns_on_grid_load=False,
+      configure_side_bar=True
+    )
+
+    col3, col4 = st.columns([2, 2])
+    with col3:
+      @st.cache_data
+      def convert_df(df):
+        # Important: Cache the conversion to prevent computation on every rerun
+        return df.to_csv().encode("utf-8")
+      
+      csv = convert_df(df)
+
+      st.download_button(
+        label="Download results as CSV",
+        data=csv,
+        file_name="results.csv",
+        mime="text/csv"
+      )
+  except ValueError as ve:
+    st.warning("❄️ Add a valid HuggingFace API key in the text box above ☝️")
+    st.stop()
